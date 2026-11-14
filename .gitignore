@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+model/
+*.log
+secrets/
+.DS_Store
+*.backup
+*.bak
+realm-export*.json
+Backup_Konfigurasi/
+k8s/secret-example-DO-NOT-APPLY.yaml

@@ -1,0 +1,109 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: uts-sbdt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.2
+          args:
+            - start-dev
+            - --import-realm
+          env:
+            - name: KC_HTTP_PORT
+              value: "8081"
+            - name: KC_HOSTNAME
+              value: "http://auth.lokal:8088"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sbdt-sso-secret
+                  key: KC_BOOTSTRAP_ADMIN_USERNAME
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sbdt-sso-secret
+                  key: KC_BOOTSTRAP_ADMIN_PASSWORD
+            - name: SBDT_DEMO_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sbdt-sso-secret
+                  key: SBDT_DEMO_USER_PASSWORD
+          ports:
+            - containerPort: 8081
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /realms/master
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 1500Mi
+      volumes:
+        - name: realm
+          configMap:
+            name: sbdt-keycloak-realm
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sbdt-api
+  namespace: uts-sbdt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sbdt-api
+  template:
+    metadata:
+      labels:
+        app: sbdt-api
+    spec:
+      containers:
+        - name: api
+          image: sbdt-uts-api:v1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: sbdt-api-config
+            - secretRef:
+                name: sbdt-db-secret
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 8
+            periodSeconds: 8
+          resources:
+            requests:
+              memory: 150Mi
+              cpu: 100m
+            limits:
+              memory: 700Mi

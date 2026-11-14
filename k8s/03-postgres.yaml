@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: db-primary, namespace: uts-sbdt}
+spec:
+  serviceName: db-primary-headless
+  replicas: 1
+  selector: {matchLabels: {app: db-primary}}
+  template:
+    metadata: {labels: {app: db-primary}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          args: ["-c", "wal_level=replica", "-c", "max_wal_senders=5", "-c", "max_replication_slots=5", "-c", "wal_keep_size=128MB"]
+          envFrom:
+            - secretRef: {name: sbdt-db-secret}
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432, name: pg}]
+          readinessProbe:
+            exec: {command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - {name: pgdata, mountPath: /var/lib/postgresql/data}
+            - {name: init-scripts, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+          resources:
+            requests: {memory: 200Mi, cpu: 100m}
+            limits: {memory: 700Mi}
+      volumes:
+        - name: init-scripts
+          configMap: {name: sbdt-primary-init, defaultMode: 493}
+  volumeClaimTemplates:
+    - metadata: {name: pgdata}
+      spec:
+        storageClassName: standard
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: db-replica, namespace: uts-sbdt}
+spec:
+  serviceName: db-replica-headless
+  replicas: 1
+  selector: {matchLabels: {app: db-replica}}
+  template:
+    metadata: {labels: {app: db-replica}}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          command: [bash, /scripts/standby.sh]
+          envFrom:
+            - secretRef: {name: sbdt-db-secret}
+          env:
+            - {name: PRIMARY_HOST, value: db-primary}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432, name: pg}]
+          readinessProbe:
+            exec: {command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          volumeMounts:
+            - {name: pgdata, mountPath: /var/lib/postgresql/data}
+            - {name: standby-script, mountPath: /scripts, readOnly: true}
+          resources:
+            requests: {memory: 200Mi, cpu: 100m}
+            limits: {memory: 700Mi}
+      volumes:
+        - name: standby-script
+          configMap: {name: sbdt-standby-script, defaultMode: 493}
+  volumeClaimTemplates:
+    - metadata: {name: pgdata}
+      spec:
+        storageClassName: standard
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 1Gi}}

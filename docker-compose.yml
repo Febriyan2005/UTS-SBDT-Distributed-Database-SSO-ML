@@ -1,0 +1,119 @@
+
+name: uts-sbdt
+
+services:
+  # ==========================================
+  # POSTGRESQL PRIMARY - WRITE DATABASE
+  # ==========================================
+  db-primary:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REPL_PASSWORD: ${REPL_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=5
+      - -c
+      - max_replication_slots=5
+      - -c
+      - wal_keep_size=128MB
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+      - ./postgres/01_init_primary.sh:/docker-entrypoint-initdb.d/01_init_primary.sh:ro
+      - ./postgres/02_schema.sql:/docker-entrypoint-initdb.d/02_schema.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 8s
+      timeout: 5s
+      retries: 25
+
+  # ==========================================
+  # POSTGRESQL READ REPLICA - READ DATABASE
+  # ==========================================
+  db-replica:
+    image: postgres:17
+    entrypoint:
+      - bash
+      - /scripts/standby.sh
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REPL_PASSWORD: ${REPL_PASSWORD}
+      PRIMARY_HOST: db-primary
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+      - ./postgres/standby.sh:/scripts/standby.sh:ro
+    depends_on:
+      db-primary:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 8s
+      timeout: 5s
+      retries: 25
+
+  # ==========================================
+  # KEYCLOAK - SSO / OPENID CONNECT
+  # ==========================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      SBDT_DEMO_USER_PASSWORD: ${SBDT_DEMO_USER_PASSWORD:?Password_demo_belum_diatur}
+      KC_HTTP_PORT: "8081"
+      KC_HOSTNAME: http://localhost:8081
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - keycloak_data:/opt/keycloak/data/h2
+
+  # ==========================================
+  # FASTAPI - MACHINE LEARNING INFERENCE
+  # ==========================================
+  api:
+    image: sbdt-uts-api:v1
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST_WRITE: db-primary
+      DB_HOST_READ: db-replica
+      DB_PORT: "5432"
+      OIDC_ISSUER: http://localhost:8081/realms/sbdt-uts
+      OIDC_JWKS_URL: http://keycloak:8081/realms/sbdt-uts/protocol/openid-connect/certs
+      OIDC_AUDIENCE: sbdt-api
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+# ==========================================
+# PERSISTENT DOCKER VOLUMES
+# ==========================================
+volumes:
+  primary_data:
+  replica_data:
+  keycloak_data:

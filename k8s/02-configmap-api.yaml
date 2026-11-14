@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sbdt-api-config
+  namespace: uts-sbdt
+data:
+  DB_HOST_WRITE: db-primary
+  DB_HOST_READ: db-replica
+  DB_PORT: "5432"
+  OIDC_ISSUER: http://auth.lokal:8088/realms/sbdt-uts
+  OIDC_JWKS_URL: http://keycloak:8081/realms/sbdt-uts/protocol/openid-connect/certs
+  OIDC_AUDIENCE: sbdt-api

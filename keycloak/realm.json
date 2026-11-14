@@ -1,0 +1,61 @@
+{
+    "realm":  "sbdt-uts",
+    "enabled":  true,
+    "displayName":  "UTS SBDT - Demo SSO",
+    "registrationAllowed":  false,
+    "loginWithEmailAllowed":  false,
+    "clients":  [
+                    {
+                        "clientId":  "sbdt-client",
+                        "name":  "UTS SBDT API Demo",
+                        "enabled":  true,
+                        "protocol":  "openid-connect",
+                        "publicClient":  true,
+                        "standardFlowEnabled":  true,
+                        "directAccessGrantsEnabled":  true,
+                        "redirectUris":  [
+                                             "http://localhost:*/*",
+                                             "http://127.0.0.1:*/*",
+                                             "http://api.lokal:*/*"
+                                         ],
+                        "webOrigins":  [
+                                           "+"
+                                       ],
+                        "protocolMappers":  [
+                                                {
+                                                    "name":  "audience-sbdt-api",
+                                                    "protocol":  "openid-connect",
+                                                    "protocolMapper":  "oidc-audience-mapper",
+                                                    "consentRequired":  false,
+                                                    "config":  {
+                                                                   "included.custom.audience":  "sbdt-api",
+                                                                   "access.token.claim":  "true",
+                                                                   "id.token.claim":  "false"
+                                                               }
+                                                }
+                                            ]
+                    }
+                ],
+    "users":  [
+                  {
+                      "username":  "mahasiswa",
+                      "enabled":  true,
+                      "firstName":  "User",
+                      "lastName":  "Lab",
+                      "emailVerified":  true,
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "${SBDT_DEMO_USER_PASSWORD}",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "clientRoles":  {
+                                          "account":  [
+                                                          "manage-account",
+                                                          "view-profile"
+                                                      ]
+                                      }
+                  }
+              ]
+}
